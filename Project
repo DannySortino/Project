@@ -1,0 +1,26 @@
+import bpy
+import random
+spawn = 100
+
+for i in range (0, spawn):
+    bpy.data.scenes["Scene"].frame_current = 0
+    
+    LocX = random.randint(-20, 20)
+    LocY = random.randint(-20, 20)
+    
+    def SpawnCube():
+        bpy.ops.mesh.primitive_cube_add()
+        bpy.context.object.name = "Person"
+        bpy.context.active_object.location= LocX, LocY ,0
+        
+    SpawnCube()
+    
+    bpy.ops.anim.keyframe_insert(type='Location')
+    
+    bpy.context.active_object.location= bpy.data.objects["Target"].location
+    
+    FrameEnd = random.randint(120, 200)
+    bpy.data.scenes["Scene"].frame_current = FrameEnd
+    
+    bpy.ops.anim.keyframe_insert(type='Location')
+    bpy.data.scenes["Scene"].frame_current = 0

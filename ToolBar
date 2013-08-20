@@ -1,0 +1,76 @@
+import bpy
+import math
+
+verts = []
+faces = []
+numX = 2
+numY = 2
+scale = 5
+
+for i in range (0, numX):
+    for j in range(0,numY):
+        
+        u = 2*(i/numX-1/2)
+        v = 2*(j/numY-1/2)
+        
+        x = scale*u + 2.5
+        y = scale*v + 2.5
+        z = 0
+        
+        vert = (x,y,z)
+        verts.append(vert)
+count = 0
+
+for i in range (0, numY *(numX-1)):
+    if count < numY-1:
+        A = i
+        B = i+1
+        C = (i+numY)+1
+        D = (i+numY)
+        face = (A,B,C,D)
+        faces.append(face)
+        count = count + 1
+    else:
+        count = 0
+
+mesh = bpy.data.meshes.new("Target")
+object = bpy.data.objects.new("Target",mesh)
+
+object.location = 0,0,0
+bpy.context.scene.objects.link(object)
+
+mesh.from_pydata(verts,[],faces)
+
+
+
+
+
+class CustomPanel(bpy.types.Panel):
+    """Crowd simulation program"""
+    bl_label = "CrowD"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
+    
+    def Setlocation(LocXYZ):
+        LocationXYZ = LocXYZ
+
+    def draw(self, context):
+        layout = self.layout
+ 
+        row = layout.row()
+        row.label(text="Add Destination:")
+ 
+        split = layout.split()
+        col = split.column(align=True)
+ 
+        col.operator("mesh.primitive_plane_add", text="Target")
+        
+        
+def register():
+    bpy.utils.register_class(CustomPanel)
+ 
+def unregister():
+    bpy.utils.unregister_class(CustomPanel)
+ 
+if __name__ == "__main__":
+    register()
