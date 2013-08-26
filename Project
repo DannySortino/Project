@@ -1,26 +1,194 @@
 import bpy
 import random
-spawn = 100
+Scene_Name = bpy.context.scene.name
+class People(object):
+    #stuff here are considered static variables
 
-for i in range (0, spawn):
-    bpy.data.scenes["Scene"].frame_current = 0
-    
-    LocX = random.randint(-20, 20)
-    LocY = random.randint(-20, 20)
-    
-    def SpawnCube():
-        bpy.ops.mesh.primitive_cube_add()
-        bpy.context.object.name = "Person"
-        bpy.context.active_object.location= LocX, LocY ,0
+    def __init__ (self, Name, Count): # initalises the cubes spawn
+        self.Speed = (random.randint(bpy.data.scenes[Scene_Name].Min_Speed, bpy.data.scenes[Scene_Name].Max_Speed)/24)
+        self.Target  = bpy.data.objects["Target"].location
+        self.Location = random.randint(bpy.data.scenes[Scene_Name].Min_X, bpy.data.scenes[Scene_Name].Max_X), random.randint(bpy.data.scenes[Scene_Name].Min_Y, bpy.data.scenes[Scene_Name].Max_Y), random.randint(bpy.data.scenes[Scene_Name].Min_Z, bpy.data.scenes[Scene_Name].Max_Z) 
+        self.Location = list(self.Location)
+        self.AllowMingle = bpy.data.scenes[Scene_Name].Mingle
+        self.Mingle = False
+        self.Moving = True 
+        self.Name = Name
+        self.CurrentFrame = 0
+        bpy.ops.mesh.primitive_cube_add() # Spawning the Cube
+        bpy.context.object.name = Name #Naming the Cube
+        bpy.data.objects[self.Name].location= self.Location # Setting location
+        bpy.ops.anim.keyframe_insert(type='Location')
+        self.Done = False  # Checks to see if it is at its final location
+        self.Obstacle = False 
+        self.MinX = 0
+        self.MinY = 0
+        self.MinZ = 0
+        self.MaxX = 0
+        self.MaxY = 0
+        self.MaxZ = 0 
+        self.Number = Count    
+    def Action(self) : # Check what action the object should be doing
+        print("Hello")
+        if self.Moving == True :
+            if self.Mingle == False :
+                X = 2                 # Move normally
+            elif self.Mingle == True :
+                X = 2            # Mingle
+        elif self.Moving == False :
+                X = 2
+                # Do nothing
+    def MovingVertex(self, Number): 
+        C = bpy.context
+        aObj = C.active_object
+        if aObj == None:
+            print('No Mesh seleted')
+            return
+        vts = aObj.data.vertices
+        for count in range(0, 8):
+            x = [i.index for i in vts if i.select==True][Number]
+            if x == None:
+                print('1 Vertex selected at least')
+                return
+            wm = aObj.matrix_world.copy()
+            aP = wm * vts[x].co
+            if self.MinX > aP[0]:
+                self.MinX = aP[0]
+            elif self.MaxX < aP[0]:
+                self.MaxX = aP[0]
+            if self.MinY > aP[1]:
+                self.MinY = aP[1]
+            elif self.MaxY < aP[1]:
+                self.MaxY = aP[1]
+            if self.MinZ > aP[2]:
+                self.MinZ = aP[2]
+            elif self.MaxZ > aP[2]:
+                self.MaxZ = aP[2]
+               
+    def Move(self, Number): # make the object move a value equal to its speed
+        ob = bpy.data.objects[self.Name]
+        if self.Moving == True:
+            MovementNeededX = self.Target[0] - self.Location[0]
+            MovementNeededY = self.Target[1] - self.Location[1]
+            MovementNeededZ = self.Target[2] - self.Location[2]
+            
+            TotalMovement = abs(MovementNeededX) + abs(MovementNeededY) + abs(MovementNeededZ)
+            if TotalMovement != 0:
+                self.Obstacle = False
+                TotalMovementPossible = self.Speed / TotalMovement
+                self.MovingVertex(Number)
+                self.CheckCollision((self.Location[0] + (MovementNeededX * TotalMovementPossible)), (self.Location[1] + (MovementNeededY * TotalMovementPossible)), (self.Location[2] + (MovementNeededZ * TotalMovementPossible)))
+                bpy.data.scenes[Scene_Name].frame_current = bpy.data.scenes[Scene_Name].frame_current + 1
+                if self.Obstacle == False: # There is no obstacle in the way
+                    if self.Location[0] > self.Target[0]:
+                        if self.Target[0] > self.Location[0] + (MovementNeededX * TotalMovementPossible):
+                            self.Location[0] = self.Target[0]
+                        else:
+                            self.Location[0] = self.Location[0] + (MovementNeededX * TotalMovementPossible)                     
+                    else:
+                        if self.Target[0] < self.Location[0] + (MovementNeededX * TotalMovementPossible):            
+                            self.Location[0] = self.Target[0]
+                        else:
+                            self.Location[0] = self.Location[0] + (MovementNeededX * TotalMovementPossible)   
+                            
+                    if self.Location[1] > self.Target[1]:
+                        if self.Target[1] > self.Location[1] + (MovementNeededY * TotalMovementPossible):
+                            self.Location[1] = self.Target[1]
+                        else:
+                            self.Location[1] = self.Location[1] + (MovementNeededY * TotalMovementPossible)                     
+                    else:
+                        if self.Target[1] < self.Location[1] + (MovementNeededY * TotalMovementPossible):            
+                            self.Location[1] = self.Target[1]
+                        else:
+                            self.Location[1] = self.Location[1] + (MovementNeededY * TotalMovementPossible) 
+                            
+                    if self.Location[2] > self.Target[2]:
+                        if self.Target[2] > self.Location[2] + (MovementNeededZ * TotalMovementPossible):
+                            self.Location[2] = self.Target[2]
+                        else:
+                            self.Location[2] = self.Location[2] + (MovementNeededZ * TotalMovementPossible)                     
+                    else:
+                        if self.Target[2] < self.Location[2] + (MovementNeededZ * TotalMovementPossible):            
+                            self.Location[2] = self.Target[2]
+                        else:
+                            self.Location[2] = self.Location[2] + (MovementNeededZ * TotalMovementPossible)          
+                else:
+                     X = 2 # Travel around the obsticle
+       
+                ob = bpy.data.objects[self.Name]
+                bpy.context.scene.objects.active=ob
+                cf = bpy.data.scenes[Scene_Name].frame_current
+                bpy.data.objects[self.Name].location= self.Location # Setting location    
+                ob.keyframe_insert(data_path='location', frame=(cf))
+                if self.Location[0] == self.Target[0]:
+                    if self.Location[1] == self.Target[1]:
+                        if self.Location[2] == self.Target[2]:
+                            self.Done = True           
+                            self.Moving = False 
+                               
+    def CheckCollision(self, MovedX, MovedY, MovedZ): # Check to see if there is collision
+        for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
+            if Count != self.Number:
+                ob = bpy.data.objects[bpy.data.scenes[Scene_Name].People_Name + "." + str(format(Count, '03'))]
+                bpy.context.scene.objects.active=ob
+                MinX = 0
+                MinY = 0
+                MinZ = 0
+                MaxX = 0
+                MaxY = 0
+                MaxZ = 0
+                C = bpy.context
+                aObj = C.active_object
+                if aObj == None:
+                    print('No Mesh seleted')
+                    return
+                vts = aObj.data.vertices
+                for count in range(0, 8):
+                    x = [i.index for i in vts if i.select==True][count]
+                    if x == None:
+                        print('1 Vertex selected at least')
+                        return
+                    wm = aObj.matrix_world.copy()
+                    aP = wm * vts[x].co
+                    if MinX > aP[0]:
+                        MinX = aP[0]
+                    elif MaxX < aP[0]:
+                        MaxX = aP[0]
+                    if MinY > aP[1]:
+                        MinY = aP[1]
+                    elif MaxY < aP[1]:
+                        MaxY = aP[1]
+                    if MinZ > aP[2]:
+                        MinZ = aP[2]
+                    elif MaxZ > aP[2]:
+                        MaxZ = aP[2]
+                if (self.MaxX + MovedX < MaxX and self.MaxX + MovedX > MinX) and (self.MaxY + MovedY < MaxY and self.MaxY + MovedY > MinY) and (self.MaxZ + MovedZ < MaxZ and self.MaxZ + MovedZ > MinZ):
+                        print("Hello")
+                        self.Obstacle = True
+    def CheckLocation(self): # Check to see if it is at target
+
+        self.Moving = True # Check to see if it has landed at its final destination   
         
-    SpawnCube()
-    
-    bpy.ops.anim.keyframe_insert(type='Location')
-    
-    bpy.context.active_object.location= bpy.data.objects["Target"].location
-    
-    FrameEnd = random.randint(120, 200)
-    bpy.data.scenes["Scene"].frame_current = FrameEnd
-    
-    bpy.ops.anim.keyframe_insert(type='Location')
-    bpy.data.scenes["Scene"].frame_current = 0
+    def MingleCheck(self): #Check to see if it should mingle
+        if self.AllowMingle == False: # If mingle is already turned off.
+            self.Mingle = False    
+
+
+
+        
+Person = [0] # Need the 0 to make sure the array doesnt count from 0.... 
+for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
+    Person.append(People(bpy.data.scenes[Scene_Name].People_Name + "." + str(format(Count, '03')), Count))
+bpy.data.scenes[Scene_Name].frame_current = 0
+Count = -1
+Done = False
+
+while Done == False:
+    Done = True
+    Count = Count + 1
+    for PersonCount in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
+        bpy.data.scenes[Scene_Name].frame_current = Count
+        Person[PersonCount].Move(PersonCount)
+        if Person[PersonCount].Done == False:
+            Done = False
+
+
