@@ -1,194 +1,479 @@
+# -*- coding: iso-8859-1 -*-
 import bpy
-import random
-Scene_Name = bpy.context.scene.name
+import random 
+import math # imports math operators
+import numpy
+Scene_Name = bpy.context.scene.name # The name of the scene
+MinXSpawn = 50000000# Large so it actually finds the smallest spawn location to check for spawning collisions
+MinYSpawn = 50000000
+MinZSpawn = 50000000
+MaxXSpawn = -50000000
+MaxYSpawn = -50000000
+MaxZSpawn = -50000000
+
+Done_Moving = [] # used to store the numbers of the people that have reached the target
+
 class People(object):
     #stuff here are considered static variables
-
-    def __init__ (self, Name, Count): # initalises the cubes spawn
-        self.Speed = (random.randint(bpy.data.scenes[Scene_Name].Min_Speed, bpy.data.scenes[Scene_Name].Max_Speed)/24)
-        self.Target  = bpy.data.objects["Target"].location
-        self.Location = random.randint(bpy.data.scenes[Scene_Name].Min_X, bpy.data.scenes[Scene_Name].Max_X), random.randint(bpy.data.scenes[Scene_Name].Min_Y, bpy.data.scenes[Scene_Name].Max_Y), random.randint(bpy.data.scenes[Scene_Name].Min_Z, bpy.data.scenes[Scene_Name].Max_Z) 
-        self.Location = list(self.Location)
+    def __init__ (self, Name, Count, SizeInX, SizeInY, SpawnNumbers, MaxXSpawn, MaxYSpawn, MinXSpawn, MinYSpawn, Xcount, Ycount): # initalises the cubes spawn
+        self.Speed = (random.randint(bpy.data.scenes[Scene_Name].Min_Speed, bpy.data.scenes[Scene_Name].Max_Speed)/24) # randomises the speed of the pepople then divides it by 24, to calculate speed per frame.
+        self.Target  = bpy.data.objects["Target"].location # sets each persons target location
+        self.Xloc = [0, (MaxXSpawn - (SizeInX * (SpawnNumbers[Count - 1] % Xcount)))] # each value added is the locations X location
+        self.Yloc = [0, (MaxYSpawn - (SizeInY * math.floor(abs(SpawnNumbers[Count - 1] / Xcount))))]
+        if MinZSpawn == MaxZSpawn:
+            self.Zloc = [0, MinZSpawn] 
+        else: 
+            self.Zloc = [0, random.randrange(MinZSpawn, MaxZSpawn)] 
+        self.rot = [0] # sets the persons rotation
+        self.Location = [self.Xloc[1],self.Yloc[1] ,self.Zloc[1]]
         self.AllowMingle = bpy.data.scenes[Scene_Name].Mingle
-        self.Mingle = False
-        self.Moving = True 
+        self.Mingle = False # by default the people will not be mingling but might change during execution
+        self.Moving = True # says the person is still moving
         self.Name = Name
-        self.CurrentFrame = 0
         bpy.ops.mesh.primitive_cube_add() # Spawning the Cube
         bpy.context.object.name = Name #Naming the Cube
         bpy.data.objects[self.Name].location= self.Location # Setting location
-        bpy.ops.anim.keyframe_insert(type='Location')
+        bpy.context.scene.frame_current = bpy.data.scenes[Scene_Name].Frame_Start #sets the current frame as the one that the user defined
+        bpy.ops.anim.keyframe_insert(type='Location') # stores the location of all the objects in the scene
+        self.CurrentFrame = bpy.context.scene.frame_current # stores information about what the current frame is
         self.Done = False  # Checks to see if it is at its final location
-        self.Obstacle = False 
-        self.MinX = 0
-        self.MinY = 0
-        self.MinZ = 0
-        self.MaxX = 0
-        self.MaxY = 0
-        self.MaxZ = 0 
-        self.Number = Count    
-    def Action(self) : # Check what action the object should be doing
-        print("Hello")
-        if self.Moving == True :
-            if self.Mingle == False :
-                X = 2                 # Move normally
-            elif self.Mingle == True :
-                X = 2            # Mingle
-        elif self.Moving == False :
-                X = 2
-                # Do nothing
-    def MovingVertex(self, Number): 
-        C = bpy.context
-        aObj = C.active_object
-        if aObj == None:
-            print('No Mesh seleted')
-            return
-        vts = aObj.data.vertices
-        for count in range(0, 8):
-            x = [i.index for i in vts if i.select==True][Number]
-            if x == None:
+        self.Obstacle = False # says initally there is no obstacles stopping it from moving
+        self.MinX = [0, 0] # each value added is the min x and y location for each frame
+        self.MinY = [0, 0]
+        self.MinZ = [0, 0]
+        self.MaxX = [0, 0]
+        self.MaxY = [0, 0]
+        self.MaxZ = [0, 0]
+        self.Reroute = False
+        self.Number = Count
+        self.CheckRotation = True # says if a rotation check has been carried out on the object for the current frame
+        self.MovedX = 0 # says how much it has moved in each direction respectively
+        self.MovedY = 0
+        self.MovedZ = 0
+        self.Check = 0 # Calculates the checked direction, Odd means left, even means right
+        self.RotationZ = [0] # stores the rotation for the people at each frame
+        self.SecondaryTarget = [0, 0, 0, 0] # when [0] = 0 then no secondary target, otherwise 1, 2, 3 become the secondary target (x,y,z)
+        self.CollisionCount = 0
+        
+        
+            
+    def SetInitialLocation(self, Number):
+       obj = bpy.data.objects[self.Name] # just to reduce repetition of writing the same information in a smaller form
+       bpy.context.scene.objects.active=obj # selects the object in the scene
+       Con = bpy.context
+       actObj = Con.active_object # sets the object selected as the active object in the scene
+       MinX = 50000000.000000 # Large so it actually finds the smallest vertex locations
+       MinY = 50000000.000000
+       MinZ = 50000000.000000
+       MaxX = -50000000.000000
+       MaxY = -50000000.000000
+       MaxZ = -50000000.000000
+       if actObj == None: # checks to make sure that an object has been selected
+           print('No Mesh selected')
+           return
+       vrt = actObj.data.vertices # used to load all the local locations of the vertex's of the object
+       for count in range(0, 8):# counts 8 vertices because a cube only has 8
+           x = [i.index for i in vrt if i.select==True][count] # used to count through all the people's vertex location
+           if x == None: # means that it has not counted any vertex locaiton
                 print('1 Vertex selected at least')
                 return
-            wm = aObj.matrix_world.copy()
-            aP = wm * vts[x].co
-            if self.MinX > aP[0]:
-                self.MinX = aP[0]
-            elif self.MaxX < aP[0]:
-                self.MaxX = aP[0]
-            if self.MinY > aP[1]:
-                self.MinY = aP[1]
-            elif self.MaxY < aP[1]:
-                self.MaxY = aP[1]
-            if self.MinZ > aP[2]:
-                self.MinZ = aP[2]
-            elif self.MaxZ > aP[2]:
-                self.MaxZ = aP[2]
-               
-    def Move(self, Number): # make the object move a value equal to its speed
-        ob = bpy.data.objects[self.Name]
-        if self.Moving == True:
-            MovementNeededX = self.Target[0] - self.Location[0]
-            MovementNeededY = self.Target[1] - self.Location[1]
-            MovementNeededZ = self.Target[2] - self.Location[2]
+           worldMat = actObj.matrix_world.copy() # sets the size of the world into a number
+           aP = worldMat * vrt[x].co # calculates the global location of a point by timesing the vertex location with the world matrix
+
+           if MinX > aP[0]: # checks to see if the vertex points foud are bigger or smaller than the stored vertex points
+               MinX = aP[0]
+           if MaxX < aP[0]:
+               MaxX = aP[0]
+           if MinY > aP[1]:
+               MinY = aP[1]
+           if MaxY < aP[1]:
+               MaxY = aP[1]
+           if MinZ > aP[2]:
+               MinZ = aP[2]
+           if MaxZ < aP[2]:
+               MaxZ = aP[2]
+           self.MinX[1] = MinX # stores all the minimum and maximum vertex points for this frame
+           self.MinY[1] = MinY
+           self.MinZ[1] = MinZ
+           self.MaxX[1] = MaxX
+           self.MaxY[1] = MaxY
+           self.MaxZ[1] = MaxZ
+
+        
+    def Rot(self, obj, MovX, MovY): # used to calculate the rotation of the object
+        pass
+        #if MovY != 0 and MovX != 0:
+            #angle = math.atan(MovY/MovX) # applied trigonometry using x and y distances to make a right angle triangle
+           # if obj.rotation_euler.z != angle:# checks to see if the rotation is the same as the current rotation
+              #  obj.rotation_euler = (0, 0, angle) # sets the objects rotation to be the new calculated rotation
+              #  bpy.ops.anim.keyframe_insert(type='Rotation') # applies changes to the objects rotation
             
-            TotalMovement = abs(MovementNeededX) + abs(MovementNeededY) + abs(MovementNeededZ)
-            if TotalMovement != 0:
-                self.Obstacle = False
-                TotalMovementPossible = self.Speed / TotalMovement
-                self.MovingVertex(Number)
-                self.CheckCollision((self.Location[0] + (MovementNeededX * TotalMovementPossible)), (self.Location[1] + (MovementNeededY * TotalMovementPossible)), (self.Location[2] + (MovementNeededZ * TotalMovementPossible)))
-                bpy.data.scenes[Scene_Name].frame_current = bpy.data.scenes[Scene_Name].frame_current + 1
-                if self.Obstacle == False: # There is no obstacle in the way
-                    if self.Location[0] > self.Target[0]:
-                        if self.Target[0] > self.Location[0] + (MovementNeededX * TotalMovementPossible):
-                            self.Location[0] = self.Target[0]
-                        else:
-                            self.Location[0] = self.Location[0] + (MovementNeededX * TotalMovementPossible)                     
+    def Move(self, Number):
+        obj = bpy.data.objects[self.Name]
+        if self.Moving == True:
+            if Person[Number].SecondaryTarget[0] == 0:
+                MovNeededX = self.Target[0] - self.Location[0] # takes away  current location cordinate from target location x co-ordinate to work out how much it needs to move in the x-direction.
+                MovNeededY = self.Target[1] - self.Location[1]
+                MovNeededZ = self.Target[2] - self.Location[2]
+            else:
+                print('Moving secondary target')
+                MovNeededX = self.SecondaryTarget[1] - self.Location[0] # takes away  current location cordinate from target location x co-ordinate to work out how much it needs to move in the x-direction.
+                MovNeededY = self.SecondaryTarget[2] - self.Location[1]
+                MovNeededZ = self.SecondaryTarget[3] - self.Location[2]
+            self.Rot(obj, MovNeededX, MovNeededY) # applies the rotation
+            TotalMovNeeded = abs(MovNeededX) + abs(MovNeededY) + abs(MovNeededZ) # calculates the total m ovement needed
+            if TotalMovNeeded != 0:
+                TotalMovPos = self.Speed / TotalMovNeeded # calculates a ratio of which works out how much it moves in each direction dependent on total speed
+                self.CurrentFrame = self.CurrentFrame + 1 # sets the frame 1 ahead of what it was before
+                self.MovedX = (MovNeededX * TotalMovPos) # multiplies the movment needed with the ratio of what movement is possible
+                self.MovedY = (MovNeededY * TotalMovPos)
+                self.MovedZ = (MovNeededZ * TotalMovPos)
+                    
+    
+def CheckCollision(PersonCount, Person, ColNumb):
+    Count = 0 # sets the count for people to start off at 0
+    for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1 ):
+        if Count != PersonCount:# means person doesnt exist
+            if Person[PersonCount].Done != True: # says they have reached their final destination
+                if Done_Moving.count(Count) <= bpy.data.scenes[Scene_Name].SpawnCount: # if the cube it collides with has stopped
+                    if Person[Count].SecondaryTarget[0] == 0:
+                        TargetX = Person[Count].Target[0]
+                        TargetY = Person[Count].Target[1]
+                        TargetZ = Person[Count].Target[2]
                     else:
-                        if self.Target[0] < self.Location[0] + (MovementNeededX * TotalMovementPossible):            
-                            self.Location[0] = self.Target[0]
+                        TargetX = Person[Count].SecondaryTarget[1]
+                        TargetY = Person[Count].SecondaryTarget[2]
+                        TargetZ = Person[Count].SecondaryTarget[3]
+                    Person[PersonCount].SecondaryTarget[0] = 0
+                    Frame = int(bpy.context.scene.frame_current)-int(bpy.data.scenes[Scene_Name].Frame_Start)# sets the frame number for which is being addressed
+                    if abs(abs(Person[Count].Target[0] - Person[Count].Location[0]) + abs(Person[Count].Target[1] - Person[Count].Location[1]) + abs(Person[Count].Target[2] - Person[Count].Location[2])) != 0:    
+                        TotalMovPos = Person[Count].Speed / abs(abs(Person[Count].Target[0] - Person[Count].Location[0]) + abs(Person[Count].Target[1] - Person[Count].Location[1]) + abs(Person[Count].Target[2] - Person[Count].Location[2])) # recalculates the total movement that can be done
+                        MovingX = TotalMovPos * (TargetX - Person[Count].Location[0]) #PersonChecked moved location in x direction
+                        MovingY = TotalMovPos * (TargetY - Person[Count].Location[1])
+                        MovingZ = TotalMovPos * (TargetZ - Person[Count].Location[2])
+                        Frame = int(bpy.context.scene.frame_current)-int(bpy.data.scenes[Scene_Name].Frame_Start)# sets the frame number for which is being addressed
+                        #print(Frame)
+
+                        if Person[Count].CollisionCount == 100:
+                            print('Colided 100 times') # Find way to judge movement behind person in way, and set position there
+                            Person[Count].Xloc[Frame + 1] = (Person[Count].Xloc[Frame] + (MovingX / 100))
+                            Person[Count].Yloc[Frame + 1] = (Person[Count].Yloc[Frame] + (MovingY / 100))
+                            Person[Count].Zloc[Frame + 1] = (Person[Count].Zloc[Frame] + (MovingZ / 100))
+                            Person[Count].Location[0] = Person[Count].Xloc[Frame + 1]
+                            Person[Count].Location[1] = Person[Count].Yloc[Frame + 1]
+                            Person[Count].Location[2] = Person[Count].Zloc[Frame + 1]
+                            Person[Count].MaxX[Frame + 1] = (Person[Count].MaxX[Frame] + (MovingX / 100))
+                            Person[Count].MinX[Frame + 1] = (Person[Count].MinX[Frame] + (MovingX / 100))
+                            Person[Count].MaxY[Frame + 1] = (Person[Count].MaxY[Frame] + (MovingY / 100))
+                            Person[Count].MinY[Frame + 1] = (Person[Count].MinY[Frame] + (MovingY / 100))
+                            Person[Count].MaxZ[Frame + 1] = (Person[Count].MaxZ[Frame] + (MovingZ / 100))
+                            Person[Count].MinZ[Frame + 1] = (Person[Count].MaxZ[Frame] + (MovingZ / 100))
+                            Person[Count].CollisionCount = 0
+                            Person[Count].Reroute = True
+#                            Person[PersonCount].CollisionCount = 0
+#                            Person[Count].SecondaryTarget[0] = 1
+#                            if Person[PersonCount].Xloc[Frame] >= Person[Count].Target[0]:
+#                                Person[Count].SecondaryTarget[1] = Person[PersonCount].Xloc[Frame] - 0.005
+#                            else:
+#                                Person[Count].SecondaryTarget[1] = Person[PersonCount].Xloc[Frame] + 0.005
+#                            if Person[PersonCount].Yloc[Frame] >= Person[Count].Target[1]:
+#                                Person[Count].SecondaryTarget[2] = Person[PersonCount].Yloc[Frame] - 0.005
+#                            else:
+#                                Person[Count].SecondaryTarget[2] = Person[PersonCount].Yloc[Frame] + 0.005
+#                            if Person[PersonCount].Zloc[Frame] >= Person[Count].Target[2]:
+#                                Person[Count].SecondaryTarget[3] = Person[PersonCount].Zloc[Frame] - 0.005
+#                            else:
+#                                Person[Count].SecondaryTarget[3] = Person[PersonCount].Zloc[Frame] + 0.005
+#                            Person[PersonCount].SecondaryTarget[0] = 0
+#                            Person[PersonCount].Obstacle = False
+#                            Person[PersonCount].Moving = False # says there is no more movement from this person
+#                            Person[PersonCount].Done = True # says they have reached their final destination
+#                            Done_Moving.append(Person[PersonCount].Number)
+                        if  Person[Count].Reroute == True:
+                            pass
                         else:
-                            self.Location[0] = self.Location[0] + (MovementNeededX * TotalMovementPossible)   
+                            #if (abs(int(abs(Person[Count].MaxX[Frame]) - abs(Person[PersonCount].MaxX[FraAme]))) < 0.4) or (abs(int(abs(Person[Count].MinX[Frame]) - abs(Person[PersonCount].MinX[Frame]))) < 0.4): # checks to see if the persons vertex location in X direction is within 0.06 otherwise it is too far away and doesnt need to check collision.
+                                #if (abs(int(abs(Person[Count].MaxY[Frame]) - abs(Person[PersonCount].MaxY[Frame]))) < 0.4) or (abs(int(abs(Person[Count].MinY[Frame]) - abs(Person[PersonCount].MinY[Frame]))) < 0.4):
                             
-                    if self.Location[1] > self.Target[1]:
-                        if self.Target[1] > self.Location[1] + (MovementNeededY * TotalMovementPossible):
-                            self.Location[1] = self.Target[1]
-                        else:
-                            self.Location[1] = self.Location[1] + (MovementNeededY * TotalMovementPossible)                     
+                                    #if (abs(int(abs(Person[Count].MaxZ[Frame]) - abs(Person[PersonCount].MaxZ[Frame]))) < 0.4) or (abs(int(abs(Person[Count].MinZ[Frame]) - abs(Person[PersonCount].MinZ[Frame]))) < 0.4):
+                            if any([(Xloc >= Person[PersonCount].MinX[Frame] + Person[PersonCount].MovedX) and (Xloc <= Person[PersonCount].MaxX[Frame] + Person[PersonCount].MovedX) for Xloc in [(Person[Count].MinX[Frame] + MovingX), Person[Count].MaxX[Frame] + MovingX]]):
+                                #print('x intersection')
+                                if Person[PersonCount].MaxX[Frame] + Person[PersonCount].MovedX < Person[Count].MaxX[Frame] + MovingX:
+                                    XPoint = [(Person[Count].MaxX[Frame] + MovingX), 0]
+                                else:
+                                    XPoint = [(Person[Count].MinX[Frame] + MovingX), 1]
+                                if any([(Yloc >= Person[PersonCount].MinY[Frame] + Person[PersonCount].MovedY) and (Yloc <= Person[PersonCount].MaxY[Frame] + Person[PersonCount].MovedY) for Yloc in [(Person[Count].MinY[Frame] + MovingY), Person[Count].MaxY[Frame] + MovingY]]):
+                                    print('y intersection')
+                                    if Person[PersonCount].MaxY[Frame] + Person[PersonCount].MovedY < Person[Count].MaxY[Frame] + MovingY:
+                                        YPoint = [(Person[Count].MaxY[Frame] + MovingY), 0]
+                                    else:
+                                        YPoint = [(Person[Count].MinY[Frame] + MovingY), 1]
+                                    if any([(Zloc >= Person[PersonCount].MinZ[Frame] + Person[PersonCount].MovedZ) and (Zloc <= Person[PersonCount].MaxZ[Frame] + Person[PersonCount].MovedZ) for Zloc in [(Person[Count].MinZ[Frame] + MovingZ), Person[Count].MaxZ[Frame] + MovingZ]]):
+                                        print('z intersection')
+                                        if Person[PersonCount].MaxZ[Frame] + Person[PersonCount].MovedZ < Person[Count].MaxZ[Frame] + MovingZ:
+                                            ZPoint = [(Person[Count].MaxZ[Frame] + MovingZ), 0]
+                                        else:
+                                            ZPoint = [(Person[Count].MinZ[Frame] + MovingZ), 1]
+                                        print('****', Person[PersonCount].Name, Person[Count].Name)
+                                        Person[Count].CollisionCount = Person[Count].CollisionCount + 1
+                                        Person[Count].Obstacle = True # it has found an obstacle
+                                        Person[Count].Check = Person[Count].Check + 1 # starts counting up with direction to check for an alternate route
+                                        Person[Count].SecondaryTarget[0] = 1
+                                        CollisionReroute(Count, Person, XPoint, YPoint, ZPoint, Frame, PersonCount) # calculate the collision reroute
                     else:
-                        if self.Target[1] < self.Location[1] + (MovementNeededY * TotalMovementPossible):            
-                            self.Location[1] = self.Target[1]
-                        else:
-                            self.Location[1] = self.Location[1] + (MovementNeededY * TotalMovementPossible) 
-                            
-                    if self.Location[2] > self.Target[2]:
-                        if self.Target[2] > self.Location[2] + (MovementNeededZ * TotalMovementPossible):
-                            self.Location[2] = self.Target[2]
-                        else:
-                            self.Location[2] = self.Location[2] + (MovementNeededZ * TotalMovementPossible)                     
-                    else:
-                        if self.Target[2] < self.Location[2] + (MovementNeededZ * TotalMovementPossible):            
-                            self.Location[2] = self.Target[2]
-                        else:
-                            self.Location[2] = self.Location[2] + (MovementNeededZ * TotalMovementPossible)          
+                        Person[Count].Obstacle = False
+                        Person[Count].Moving = False # says there is no more movement from this person
+                        Person[Count].Done = True # says they have reached their final destination
+                        Done_Moving.append(Person[Count].Number)
+        Frame = int(bpy.context.scene.frame_current)-int(bpy.data.scenes[Scene_Name].Frame_Start)# sets the frame number for which is being addressed
+        if Person[Count].Done != True: # says they have reached their final destination 
+            if Person[Count].Xloc[Frame + 1] == 0:
+                if Person[Count].SecondaryTarget[0] == 0:
+                    TargetX = Person[Count].Target[0]
+                    TargetY = Person[Count].Target[1]
+                    TargetZ = Person[Count].Target[2]
                 else:
-                     X = 2 # Travel around the obsticle
-       
-                ob = bpy.data.objects[self.Name]
-                bpy.context.scene.objects.active=ob
-                cf = bpy.data.scenes[Scene_Name].frame_current
-                bpy.data.objects[self.Name].location= self.Location # Setting location    
-                ob.keyframe_insert(data_path='location', frame=(cf))
-                if self.Location[0] == self.Target[0]:
-                    if self.Location[1] == self.Target[1]:
-                        if self.Location[2] == self.Target[2]:
-                            self.Done = True           
-                            self.Moving = False 
-                               
-    def CheckCollision(self, MovedX, MovedY, MovedZ): # Check to see if there is collision
-        for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
-            if Count != self.Number:
-                ob = bpy.data.objects[bpy.data.scenes[Scene_Name].People_Name + "." + str(format(Count, '03'))]
-                bpy.context.scene.objects.active=ob
-                MinX = 0
-                MinY = 0
-                MinZ = 0
-                MaxX = 0
-                MaxY = 0
-                MaxZ = 0
-                C = bpy.context
-                aObj = C.active_object
-                if aObj == None:
-                    print('No Mesh seleted')
-                    return
-                vts = aObj.data.vertices
-                for count in range(0, 8):
-                    x = [i.index for i in vts if i.select==True][count]
-                    if x == None:
-                        print('1 Vertex selected at least')
-                        return
-                    wm = aObj.matrix_world.copy()
-                    aP = wm * vts[x].co
-                    if MinX > aP[0]:
-                        MinX = aP[0]
-                    elif MaxX < aP[0]:
-                        MaxX = aP[0]
-                    if MinY > aP[1]:
-                        MinY = aP[1]
-                    elif MaxY < aP[1]:
-                        MaxY = aP[1]
-                    if MinZ > aP[2]:
-                        MinZ = aP[2]
-                    elif MaxZ > aP[2]:
-                        MaxZ = aP[2]
-                if (self.MaxX + MovedX < MaxX and self.MaxX + MovedX > MinX) and (self.MaxY + MovedY < MaxY and self.MaxY + MovedY > MinY) and (self.MaxZ + MovedZ < MaxZ and self.MaxZ + MovedZ > MinZ):
-                        print("Hello")
-                        self.Obstacle = True
-    def CheckLocation(self): # Check to see if it is at target
+                    TargetX = Person[Count].SecondaryTarget[1]
+                    TargetY = Person[Count].SecondaryTarget[2]
+                    TargetZ = Person[Count].SecondaryTarget[3]
+                Person[PersonCount].SecondaryTarget[0] = 0
+                TotalMovPos = Person[Count].Speed / abs(abs(Person[Count].Target[0] - Person[Count].Location[0]) + abs(Person[Count].Target[1] - Person[Count].Location[1]) + abs(Person[Count].Target[2] - Person[Count].Location[2])) # recalculates the total movement that can be done
+                MovingX = TotalMovPos * (TargetX - Person[Count].Location[0]) #PersonChecked moved location in x direction
+                MovingY = TotalMovPos * (TargetY - Person[Count].Location[1])
+                MovingZ = TotalMovPos * (TargetZ - Person[Count].Location[2])
+                Person[Count].Xloc[Frame + 1] = (Person[Count].Xloc[Frame] + MovingX)
+                Person[Count].Yloc[Frame + 1] = (Person[Count].Yloc[Frame] + MovingY)
+                Person[Count].Zloc[Frame + 1] = (Person[Count].Zloc[Frame] + MovingZ)
+                if abs(abs(Person[Count].Target[0] - Person[Count].Xloc[Frame + 1]) + abs(Person[Count].Target[1] -Person[Count].Yloc[Frame + 1]) + abs(Person[Count].Target[2] - Person[Count].Zloc[Frame + 1])) < 0.15:    
+                        Person[Count].Xloc[Frame + 1] = 0
+                        Person[Count].Yloc[Frame + 1] = 0
+                        Person[Count].Zloc[Frame + 1] = 0
+                        Person[Count].MaxX.append(1)
+                        Person[Count].MinX.append(-1)
+                        Person[Count].MaxY.append(1)
+                        Person[Count].MinY.append(-1)
+                        Person[Count].MaxZ.append(1)
+                        Person[Count].MinZ.append(-1)
+                        Person[Count].Location[0] = Person[Count].Xloc[Frame + 1]
+                        Person[Count].Location[1] = Person[Count].Yloc[Frame + 1]
+                        Person[Count].Location[2] = Person[Count].Zloc[Frame + 1]
+                else:
+                    if abs(abs(Person[Count].Target[0] - Person[Count].Location[0]) + abs(Person[Count].Target[1] - Person[Count].Location[1]) + abs(Person[Count].Target[2] - Person[Count].Location[2])) != 0:    
+                        Person[Count].Xloc[Frame + 1] = (Person[Count].Xloc[Frame] + MovingX)
+                        Person[Count].Yloc[Frame + 1] = (Person[Count].Yloc[Frame] + MovingY)
+                        Person[Count].Zloc[Frame + 1] = (Person[Count].Zloc[Frame] + MovingZ)
+                        Person[Count].Location[0] = Person[Count].Xloc[Frame + 1]
+                        Person[Count].Location[1] = Person[Count].Yloc[Frame + 1]
+                        Person[Count].Location[2] = Person[Count].Zloc[Frame + 1]
+                        Person[Count].MaxX[Frame + 1] = (Person[Count].MaxX[Frame] + MovingX)
+                        Person[Count].MinX[Frame + 1] = (Person[Count].MinX[Frame] + MovingX)
+                        Person[Count].MaxY[Frame + 1] = (Person[Count].MaxY[Frame] + MovingY)
+                        Person[Count].MinY[Frame + 1] = (Person[Count].MinY[Frame] + MovingY)
+                        Person[Count].MaxZ[Frame + 1] = (Person[Count].MaxZ[Frame] + MovingZ)
+                        Person[Count].MinZ[Frame + 1] = (Person[Count].MaxZ[Frame] + MovingZ)
+        else:
+            Person[Count].Xloc[Frame + 1] = Person[Count].Xloc[Frame]
+            Person[Count].Yloc[Frame + 1] = Person[Count].Yloc[Frame]
+            Person[Count].Zloc[Frame + 1] = Person[Count].Zloc[Frame]
+                    
+def CollisionReroute(PersonCount, Person, XPoint, YPoint, ZPoint, Frame, ColNumb):
+    print("Collision Detected")
+    print(' Attempt re-reoute times')
+    print(Frame)
+#    Person[PersonCount].SecondaryTarget[0] = 0
+#    Person[PersonCount].Obstacle = False
+#    Person[PersonCount].Moving = False # says there is no more movement from this person
+#    Person[PersonCount].Done = True # says they have reached their final destination
+#    Done_Moving.append(Person[PersonCount].Number)
+    if Person[PersonCount].MovedX > Person[PersonCount].MovedY:
+        if YPoint[1] == 1:
+            Person[PersonCount].SecondaryTarget[2] = 2 * (Person[PersonCount].MinY[Frame] - YPoint[0])
+        else:
+            Person[PersonCount].SecondaryTarget[2] = 2 * (Person[PersonCount].MaxY[Frame] - YPoint[0])
+        Person[PersonCount].SecondaryTarget[1] = Person[PersonCount].Target[0]
+    else:
+        if XPoint[1] == 1:
+            Person[PersonCount].SecondaryTarget[1] = 2 * (Person[PersonCount].MinX[Frame] - XPoint[0])
+        else:
+            Person[PersonCount].SecondaryTarget[1] = 2 * (Person[PersonCount].MaxX[Frame] - XPoint[0])
+        Person[PersonCount].SecondaryTarget[2] = Person[PersonCount].Target[1]
+            
+    Person[PersonCount].SecondaryTarget[3] = Person[PersonCount].Target[2]
+    Person[PersonCount].Move(PersonCount)
+    CheckCollision(PersonCount, Person, ColNumb)
 
-        self.Moving = True # Check to see if it has landed at its final destination   
+def SpawnLocations(MaxXLoc, MinXLoc, MaxYLoc, MinYLoc, SizeInX, SizeInY, SpawnSize):
+    bpy.context.scene.objects.active = bpy.data.objects["Sheep"]
+    MinXSpawn = 50000000# Large so it actually finds the smallest spawn location to check for spawning collisions
+    MinYSpawn = 50000000
+    MinZSpawn = 50000000
+    MaxXSpawn = -50000000
+    MaxYSpawn = -50000000
+    MaxZSpawn = -50000000
+    Con = bpy.context
+    actObj = Con.active_object
+    if actObj == None:
+        print('No Mesh selected')
+    vrt = actObj.data.vertices # gets the vertex location of the spawn area
+    for count in range(0, vertices):
+        x = [i.index for i in vrt if i.select==True][count]
+        if x == None:
+            print('1 Vertex selected at least')
+        worldMat = actObj.matrix_world.copy()
+        aP = worldMat * vrt[x].co
+        if MinXSpawn > int(aP[0]): # gets the vertex location of the spawn area
+            MinXSpawn = int(aP[0])
+        if MaxXSpawn < int(aP[0]):
+            MaxXSpawn = int(aP[0])
+        if MinYSpawn > int(aP[1]):
+            MinYSpawn = int(aP[1])
+        if MaxYSpawn < int(aP[1]):
+            MaxYSpawn = int(aP[1])
+        if MinZSpawn > int(aP[2]):
+            MinZSpawn = int(aP[2])
+        if MaxZSpawn < int(aP[2]):
+            MaxZSpawn = int(aP[2])
+    itemDX = abs(MaxXSpawn - MinXSpawn) * 1.5
+    itemDY = abs(MaxYSpawn - MinYSpawn) * 1.5
+    areaDX = abs(MaxXLoc - MinXLoc)
+    areaDY = abs(MaxYLoc - MinYLoc)
+    ItemSize = itemDX * itemDY * 1.5
+    SpawnAreaSize = areaDX * areaDY
+    Xcount = math.floor(areaDX / itemDX)  #math.floor(abs(MaxXSpawn - MinXSpawn) / abs(MaxXLoc - MinXLoc))
+    Ycount = math.floor(areaDY / itemDY)  #Ycount = math.floor(abs(MaxXSpawn - MinXSpawn) / abs(MaxXLoc - MinXLoc))
+    MaxSpawnCount = math.floor(ItemSize / SpawnAreaSize)
+    SizeInX = areaDX / itemDX #(abs(MaxXSpawn) - abs(MinXSpawn)) / math.floor((abs(MaxXSpawn) - abs(MinXSpawn)) / (abs(MaxXLoc) - abs(MinXLoc)))
+    SizeInY = areaDY / itemDY #(abs(MaxYSpawn) - abs(MinYSpawn)) / math.floor((abs(MaxYSpawn) - abs(MinYSpawn)) / (abs(MaxYLoc) - abs(MinYLoc)))
+    return(itemDX, itemDY, Xcount*Ycount, Xcount, Ycount)
+    
+    
         
-    def MingleCheck(self): #Check to see if it should mingle
-        if self.AllowMingle == False: # If mingle is already turned off.
-            self.Mingle = False    
-
-
-
-        
-Person = [0] # Need the 0 to make sure the array doesnt count from 0.... 
-for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
-    Person.append(People(bpy.data.scenes[Scene_Name].People_Name + "." + str(format(Count, '03')), Count))
-bpy.data.scenes[Scene_Name].frame_current = 0
-Count = -1
-Done = False
-
-while Done == False:
-    Done = True
-    Count = Count + 1
-    for PersonCount in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
-        bpy.data.scenes[Scene_Name].frame_current = Count
-        Person[PersonCount].Move(PersonCount)
-        if Person[PersonCount].Done == False:
-            Done = False
-
+if bpy.data.scenes[Scene_Name].People_Name == "":
+    print("Please enter a name for the people to spawn as.")
+else:
+    if isinstance( bpy.data.scenes[Scene_Name].Min_Speed, int) == False:
+        print("Minimum speed error: Ensure a number has been entered as the minimum speed.")
+    else:
+        if isinstance( bpy.data.scenes[Scene_Name].Max_Speed, int) == False:
+            print("Maximum speed error: Ensure a number has been entered as the maximum speed.")
+        else:
+            if bpy.data.scenes[Scene_Name].Min_Speed < 0:
+                print("Minimum speed error: Ensure that minimum speed is not negative")
+            else:
+                if bpy.data.scenes[Scene_Name].Max_Speed < 0:
+                    print("Maximum speed error: Ensure that maximum speed is not negative")
+                else:
+                    if bpy.data.scenes[Scene_Name].Min_Speed > bpy.data.scenes[Scene_Name].Max_Speed:
+                        print("Minimum speed cannot be bigger than maximum speed.")
+                    else:
+                        if bpy.data.scenes[Scene_Name].SpawnCount < 1:
+                            print("Spawn count must be greater than 0.")
+                        else:
+                            Person = [0] # Need the 0 to make sure the array doesnt count from 0.... 
+                            SpawnLocation = True
+                            TargetLocation = True
+                            try: # need to check if the plane was created, otherwise cube was created.
+                                SpawnCheck = bpy.data.objects["SpawnPlane"]
+                                vertices = 4
+                            except:
+                                try: # checks if a cube was created
+                                    SpawnCheck = bpy.data.objects["SpawnCube"]
+                                    vertices = 8
+                                except:
+                                    SpawnLocation = False
+                            if SpawnLocation == False:
+                                print("Please ensure that either a spawn cube or a spawn plane has been added to the blender world.")
+                            else:
+                                try: # need to check if the target plane has been created
+                                    TargCheck = bpy.data.objects["Target"]
+                                except:
+                                    TargetLocation = False
+                                if TargetLocation == False:
+                                    print("Please ensure that a target has been added.")
+                                else:
+                                    bpy.context.scene.objects.active = SpawnCheck
+                                    Con = bpy.context
+                                    actObj = Con.active_object
+                                    if actObj == None:
+                                       print('No Mesh selected')
+                                    vrt = actObj.data.vertices # gets the vertex location of the spawn area
+                                    for count in range(0, vertices):
+                                       x = [i.index for i in vrt if i.select==True][count]
+                                       if x == None:
+                                            print('1 Vertex selected at least')
+                                       worldMat = actObj.matrix_world.copy()
+                                       aP = worldMat * vrt[x].co
+                                       if MinXSpawn > int(aP[0]): # gets the vertex location of the spawn area
+                                           MinXSpawn = int(aP[0])
+                                       if MaxXSpawn < int(aP[0]):
+                                           MaxXSpawn = int(aP[0])
+                                       if MinYSpawn > int(aP[1]):
+                                           MinYSpawn = int(aP[1])
+                                       if MaxYSpawn < int(aP[1]):
+                                           MaxYSpawn = int(aP[1])
+                                       if MinZSpawn > int(aP[2]):
+                                           MinZSpawn = int(aP[2])
+                                       if MaxZSpawn < int(aP[2]):
+                                           MaxZSpawn = int(aP[2])
+                                    SizeInX = 0
+                                    SizeInY = 0
+                                    SpawnSize = 0
+                                    Xcount = 0
+                                    Ycount = 0
+                                    SizeInX, SizeInY, SpawnSize, Xcount, Ycount = SpawnLocations(MaxXSpawn, MinXSpawn, MaxYSpawn, MinYSpawn, SizeInX, SizeInY, SpawnSize,)
+                                    Count = 0
+                                    FrameCounter = (bpy.data.scenes[Scene_Name].Frame_Start - 1)
+                                    Done = False# sets to false because it is not yet done
+                                    Spawnnumbers = []
+                                    SpawnNumbers = numpy.random.choice(SpawnSize, bpy.data.scenes[Scene_Name].SpawnCount, replace = False)
+                                    if bpy.data.scenes[Scene_Name].SpawnCount > SpawnSize:
+                                        print('Spawn count too great for spawn area')
+                                    else:
+                                        for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
+                                            Person.append(People(bpy.data.scenes[Scene_Name].People_Name + "." + str(format(Count, '03')), Count, SizeInX, SizeInY, SpawnNumbers, MaxXSpawn, MaxYSpawn, MinXSpawn, MinYSpawn, Xcount, Ycount)) # initialises the classes for each person and spawns them
+                                            Person[Count].SetInitialLocation(Count)
+                                        while bpy.data.scenes[Scene_Name].Frame_End + 1 > FrameCounter:
+                                            FrameCounter = FrameCounter + 1
+                                            bpy.context.scene.frame_current = FrameCounter
+                                            FrameCount = 1
+                                            Counter = 0
+                                            Count = 0
+                                            while Counter < bpy.data.scenes[Scene_Name].SpawnCount:
+                                                Done = True# sets to true so if it ever encounters false it stays as false, otherwise goes to true
+                                                Counter = Counter + 1
+                                                Person[Counter].Move(Counter)# checks the persons movement
+                                                Person[Counter].Xloc.append(0)
+                                                Person[Counter].Yloc.append(0)
+                                                Person[Counter].Zloc.append(0)
+                                                Person[Counter].MaxX.append(0)
+                                                Person[Counter].MaxY.append(0)
+                                                Person[Counter].MaxZ.append(0)
+                                                Person[Counter].MinX.append(0)
+                                                Person[Counter].MinY.append(0)
+                                                Person[Counter].MinZ.append(0)
+                                                print(Counter)
+                                                CheckCollision(Counter, Person, 0) # sees if the person collides
+                                                #for Count in range(1, bpy.data.scenes[Scene_Name].SpawnCount + 1):
+                                                    #Person[Count].SetInitialLocation(Count)
+                                                    #bpy.ops.anim.keyframe_insert(type='Rotation')
+                                                    #Person[Count].Location = [Person[Count].Xloc[FrameCount],Person[Count].Yloc[FrameCount] ,Person[Count].Zloc[FrameCount]]
+                                        FrameCount = FrameCount + 1
+                                        print("Done calculating")
+                                        Count = 0
+                                        FrameCount = 0
+                                        CountFrame = 0
+                                        bpy.data.scenes[Scene_Name].frame_set(CountFrame) # sets the current frame back to the start
+                                        for FrameCount in range(bpy.data.scenes[Scene_Name].Frame_Start, bpy.data.scenes[Scene_Name].Frame_End): # goes through all the frames set by the user
+                                            Count = 0
+                                            CountFrame = CountFrame + 1
+                                            bpy.data.scenes[Scene_Name].frame_current = FrameCount
+                                            #bpy.ops.anim.change_frame(frame = FrameCount)# sets the current frame to be one higher.
+                                            for Count in range (1, bpy.data.scenes[Scene_Name].SpawnCount + 1): # counts through all the different people                                            bpy.context.scene.objects.active = bpy.data.objects[Person[Count].Name]
+                                                bpy.data.objects[Person[Count].Name].location[0] = Person[Count].Xloc[CountFrame] # applies their location at each frame
+                                                bpy.data.objects[Person[Count].Name].location[1] = Person[Count].Yloc[CountFrame]
+                                                bpy.data.objects[Person[Count].Name].location[2] = Person[Count].Zloc[CountFrame]
+                                                ob = bpy.data.objects[Person[Count].Name]
+                                                bpy.context.scene.objects.active=ob
+                                                ob.keyframe_insert(data_path='location')
+                        
 
