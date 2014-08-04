@@ -3,7 +3,7 @@ from bl_operators.presets import AddPresetBase
 from bpy.props import *
 import math
 import mathutils
-
+PresetName = ""
 class RENDER_OT_my_preset_add(AddPresetBase, bpy.types.Operator):
     """Add a new CrowD group."""
     bl_idname = 'render.my_preset_add'
@@ -11,25 +11,18 @@ class RENDER_OT_my_preset_add(AddPresetBase, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     preset_menu = 'RENDER_MT_my_presets'
     preset_subdir = 'my_render_preset'
-    
     preset_defines = [
         "scene  = bpy.context.scene",
         ]
-
     preset_values = [
         "scene.Max_Speed",
-        "scene.Max_X",
-        "scene.Max_Y",
-        "scene.Max_Z", 
+		
         "scene.Min_Speed",
-        "scene.Min_X",
-        "scene.Min_Y",
-        "scene.Min_Z",
         "scene.Mingle",
         "scene.People_Name",
         "scene.SpawnCount",
+        "scene.EndFrame",
         ]
-        
 class RENDER_OT_my_preset_save(AddPresetBase, bpy.types.Operator):
     """Save changes of CrowD group."""
     bl_idname = 'render.my_preset_save'
@@ -41,26 +34,15 @@ class RENDER_OT_my_preset_save(AddPresetBase, bpy.types.Operator):
     preset_defines = [
         "scene  = bpy.context.scene",
         ]
-
     preset_values = [
-        "scene.Max_Speed",
-        "scene.Max_X",
-        "scene.Max_Y",
-        "scene.Max_Z", 
+        "scene.Max_Speed", 
         "scene.Min_Speed",
-        "scene.Min_X",
-        "scene.Min_Y",
-        "scene.Min_Z",
         "scene.Mingle",
         "scene.People_Name",
         "scene.SpawnCount",
+        
+        "scene.EndFrame",
         ]
-class RENDER_MT_my_presets_save(bpy.types.Menu):
-    bl_label = "abc"#bpy.types.RENDER_MT_my_presets.bl_label   
-    bl_idname = "RENDER_MT_my_presets_save"
-    preset_subdir = "my_render_preset"
-    preset_operator = "script.execute_preset"
-    draw = bpy.types.Menu.draw_preset       
                                
 class RENDER_MT_my_presets(bpy.types.Menu):
     bl_label = "Group Number:"    
@@ -68,54 +50,57 @@ class RENDER_MT_my_presets(bpy.types.Menu):
     preset_subdir = "my_render_preset"
     preset_operator = "script.execute_preset"
     draw = bpy.types.Menu.draw_preset        
-
 class TargetMakerPanel(bpy.types.Panel) :
-    bl_space_type = "VIEW_3D"
+    bl_space_type = "VIEW_3D" # sets where the menu will appear in beldner
     bl_region_type = "TOOLS"
     bl_context = "objectmode"
     bl_label = "CrowD Tools"
     
     def draw(self, context) :
         layout = self.layout
-        col = layout.column_flow(align=True)
+        col = layout.column_flow(align=True) #sets the layout style of the menu
         col.label("CrowD's: ")
         row = col.row(align=True)
         row.menu("RENDER_MT_my_presets", text=bpy.types.RENDER_MT_my_presets.bl_label)
-        row.operator("render.my_preset_add", text="", icon='ZOOMIN')
+        row.operator("render.my_preset_save", text="", icon='ZOOMIN')
         row.operator("render.my_preset_add", text="", icon='ZOOMOUT').remove_active = True
         row = col.row(align=True)
-        row.operator("render.my_preset_save", text = "Save Changes")
+        row.operator("render.save_button", text = "Save Changes")
         layout = self.layout
         TheCol = self.layout.row(align = True)
         TheCol.operator("mesh.make_target", text = "Add Target")
         TheCol.prop(context.scene, "Render_Target")
-        row = layout.row()
-        row.prop(context.scene, "Mingle")
+        
+        TheCol = self.layout.row(align = True)
+        TheCol.label(text=" Spawning locations:")
+        TheCol = self.layout.row(align = True)
+        TheCol.operator("mesh.make_spawncube", text = "Add Spawn Cube")
+        
+        TheCol.operator("mesh.make_spawnplane", text = "Add Spawn Plane")
+        
         row = layout.row()
         row.prop(context.scene, "People_Name")
+        row = layout.row()
+        row.prop(context.scene, "Mingle")
         layout.label(text=" Random Speed:")
         row = layout.row()
         row.prop(context.scene, "Min_Speed")
         row.prop(context.scene, "Max_Speed")
-        layout.label(text=" Random Spawn minimum:")
-        row = layout.row(align=True)
-        row.prop(context.scene, "Min_X")
-        row.prop(context.scene, "Min_Y")
-        row.prop(context.scene, "Min_Z")
-        layout.label(text=" Random Spawn maximum:")
-        row = layout.row(align=True)
-        row.prop(context.scene, "Max_X")
-        row.prop(context.scene, "Max_Y")
-        row.prop(context.scene, "Max_Z")
         layout.label(text=" Number of people to spawn:")
         row = layout.row(align=True)
         row.prop(context.scene, "SpawnCount")
         
+        layout.label(text=" Frame settings:")
+        row = layout.row(align=True)
+        row.prop(context.scene, "Frame_Start")
+        row.prop(context.scene, "Frame_End")
+        
+                
 bpy.types.Scene.Mingle = bpy.props.BoolProperty\
 (
     name = "Mingle",
     description = "Decides if people should mingle or not."
-    ) 
+) 
 bpy.types.Scene.Render_Target = bpy.props.BoolProperty\
 (
     name = "Render Target",
@@ -134,42 +119,6 @@ bpy.types.Scene.Max_Speed= bpy.props.IntProperty\
     default = 1,
     description = "Maximum speed of the people."
     ) 
-bpy.types.Scene.Min_X= bpy.props.IntProperty\
-    (
-    name = "Min X",
-    default = 1,
-    description = "Minimum X location of the people."
-    ) 
-bpy.types.Scene.Min_Y= bpy.props.IntProperty\
-    (
-    name = "Min Y",
-    default = 1,
-    description = "Minimum Y location of the people."
-    ) 
-bpy.types.Scene.Min_Z= bpy.props.IntProperty\
-    (
-    name = "Min Z",
-    default = 1,
-    description = "Minimum Z location of the people."
-    ) 
-bpy.types.Scene.Max_X= bpy.props.IntProperty\
-    (
-    name = "Max X",
-    default = 1,
-    description = "Maximum X location of the people"
-    ) 
-bpy.types.Scene.Max_Y= bpy.props.IntProperty\
-    (
-    name = "Max Y",
-    default = 1,
-    description = "Maximum Y location of the people"
-    ) 
-bpy.types.Scene.Max_Z= bpy.props.IntProperty\
-    (
-    name = "Max Z",
-    default = 1,
-    description = "Maximum Z location of the people"
-    ) 
 bpy.types.Scene.People_Name = bpy.props.StringProperty\
     (
     name = "Spawn Names",
@@ -181,15 +130,22 @@ bpy.types.Scene.SpawnCount= bpy.props.IntProperty\
     default = 10,
     description = "How many people should spawn"
     ) 
-    
-
-
-
+bpy.types.Scene.Frame_Start= bpy.props.IntProperty\
+    (
+    name = "Frame Start",
+    default = 0,
+    description = "Decides what frame to start from."
+    )
+bpy.types.Scene.Frame_End= bpy.props.IntProperty\
+    (
+    name = "Frame End",
+    default = 0,
+    description = "Decides what frame to end on."
+    )          
 class MakeTarget(bpy.types.Operator) :
     bl_idname = "mesh.make_target"
     bl_label = "Add Target"
     bl_options = {"UNDO"}
- 
     def invoke(self, context, event):
         verts = [[1,1,0],[1,-1,0], [-1,-1,0], [-1,1,0] ]
         edges = [[0,1],[1,2],[2,3],[3,0]]
@@ -205,25 +161,45 @@ class MakeTarget(bpy.types.Operator) :
         if context.scene.Render_Target == False:
             bpy.data.objects["Target"].hide_render = True
         return {"FINISHED"}
-    #end invoke
+class MakeSpawnCube(bpy.types.Operator) :
+    bl_idname = "mesh.make_spawncube"
+    bl_label = "Add SpawnCube"
+    bl_options = {"UNDO"}
+    def invoke(self, context, event):
+        verts = [[1,1,0],[1,-1,0], [-1,-1,0], [-1,1,0], [1,1,1],[1,-1,1], [-1,-1,1], [-1,1,1] ]# draws the vertices of the square cube
+        edges = [[0,1],[1,2],[2,3],[3,0], [0,4], [1,5], [2,6], [3,7], [4, 5], [5,6], [6,7], [7,4] ] # connects the vertices of the square cube to make edges
+        faces = []
+        mesh = bpy.data.meshes.new('SpawnCube')
+        mesh.from_pydata(verts,edges,faces)
+        scene = bpy.context.scene
+        obj = bpy.data.objects.new('SpawnCube',mesh)
+        scene.objects.link(obj)
+        scene.update()
+        
+        bpy.data.objects["SpawnCube"].hide_render = True
+        return {"FINISHED"}
+class MakeSpawnPlane(bpy.types.Operator) :
+    bl_idname = "mesh.make_spawnplane"
+    bl_label = "Add SpawnPlane"
+    bl_options = {"UNDO"}
+    def invoke(self, context, event):
+        verts = [[1,1,0],[1,-1,0], [-1,-1,0], [-1,1,0] ] # draws the vertices of the square plane
+        edges = [[0,1],[1,2],[2,3],[3,0]] # connects the vertices of the square to make edges
+        faces = []
+        mesh = bpy.data.meshes.new('SpawnPlane') # add as new mewsh
+        mesh.from_pydata(verts,edges,faces)
+        scene = bpy.context.scene
+        obj = bpy.data.objects.new('SpawnPlane',mesh)
+        scene.objects.link(obj)
+        scene.update()
+        bpy.data.objects["SpawnPlane"].hide_render = True
+        return {"FINISHED"}
     
- 
-def register() :
-
-    bpy.utils.register_class(MakeTarget)
-    bpy.utils.register_class(TargetMakerPanel)
-    bpy.utils.register_class(RENDER_MT_my_presets)
-    bpy.utils.register_class(RENDER_OT_my_preset_add)
-    bpy.utils.register_class(RENDER_OT_my_preset_save)
-    bpy.utils.register_class(RENDER_MT_my_presets_save)
-def unregister() :
-
-    bpy.utils.unregister_class(MakeTarget)
-    bpy.utils.unregister_class(TargetMakerPanel)
-    bpy.utils.unregister_class(RENDER_MT_my_presets)
-    bpy.utils.unregister_class(RENDER_OT_my_preset_add)
-    bpy.utils.unregister_class(RENDER_OT_my_preset_save)
-    bpy.utils.unregister_class(RENDER_MT_my_presets_save)
-
-if __name__ == "__main__" :
-    register()
+class Object_OT_SaveButton(bpy.types.Operator):
+    bl_label = "Save Button" 
+    bl_idname = "render.save_button" # saves the name of the group
+    def execute(self, context):
+        bpy.ops.render.my_preset_save(name = bpy.types.RENDER_MT_my_presets.bl_label, remove_active=False)# saves the data over the same named location to save
+        return{'FINISHED'}    
+    #end invoke
+bpy.utils.register_module(__name__)
